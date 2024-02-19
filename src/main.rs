@@ -7,6 +7,7 @@ use std::{
 };
 use termion::{
     async_stdin,
+    cursor::DetectCursorPos,
     raw::{IntoRawMode, RawTerminal},
 };
 fn main() {
@@ -83,11 +84,26 @@ fn main() {
                     commands.push(b);
                     write!(stdout, "{}", b as char).unwrap();
                 }
-            }
-            if !command_mode {
+            } else if !command_mode {
                 write!(stdout, "{}", b as char).unwrap();
                 textPos.x += 1;
             };
+            let mut data_file = std::fs::OpenOptions::new()
+                .append(true)
+                .open("./temp/cursor.txt")
+                .expect("cannot open file");
+
+            let temp_std_out = stdout.borrow_mut();
+
+            let mut test = format!(
+                "Actual: {:?}\nExpected: {},{}\n\n",
+                temp_std_out.cursor_pos().unwrap_or_default(),
+                textPos.x,
+                textPos.y
+            );
+
+            let temp: &[u8] = unsafe { test.as_mut_vec() };
+            let _ = data_file.write(temp);
         }
 
         stdout.flush().unwrap();
