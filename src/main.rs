@@ -1,15 +1,11 @@
+pub mod rope;
+
 use std::{
-    borrow::BorrowMut,
-    io::{stdout, Read, StdoutLock, Write},
-    str::from_utf8,
+    io::{stdout, Read, Write},
     thread,
     time::Duration,
 };
-use termion::{
-    async_stdin,
-    cursor::DetectCursorPos,
-    raw::{IntoRawMode, RawTerminal},
-};
+use termion::{async_stdin, raw::IntoRawMode};
 fn main() {
     let stdout = stdout();
     let mut stdout = stdout.lock().into_raw_mode().unwrap();
@@ -39,9 +35,8 @@ fn main() {
             if b == b':' {
                 command_mode = true;
                 let size = termion::terminal_size().unwrap_or_default();
-                write!(stdout, "{}", termion::cursor::Goto(1, size.1)).unwrap();
-            }
-            if command_mode {
+                write!(stdout, "{}{}", termion::cursor::Goto(1, size.1), b as char).unwrap();
+            } else if command_mode {
                 if b == b'\r' {
                     command_mode = false;
                     let command = parse_command(commands.as_ref());
@@ -60,20 +55,23 @@ fn main() {
                         CommandList::NewFile => {
                             write!(
                                 stdout,
-                                "NewFile{}",
+                                "{}NewFile{}",
+                                termion::clear::CurrentLine,
                                 termion::cursor::Goto(textPos.x, textPos.y)
                             )
                             .unwrap();
                         }
                         CommandList::Invalid => write!(
                             stdout,
-                            "Invalid Command{}",
+                            "{}Invalid Command{}",
+                            termion::clear::CurrentLine,
                             termion::cursor::Goto(textPos.x, textPos.y)
                         )
                         .unwrap(),
                         CommandList::WriteFile => write!(
                             stdout,
-                            "File Written{}",
+                            "{}File Written{}",
+                            termion::clear::CurrentLine,
                             termion::cursor::Goto(textPos.x, textPos.y)
                         )
                         .unwrap(),
@@ -84,26 +82,23 @@ fn main() {
                     commands.push(b);
                     write!(stdout, "{}", b as char).unwrap();
                 }
+            } else if b == b'\r' {
+                textPos = Cursor {
+                    x: 1,
+                    y: textPos.y + 1,
+                };
+                write!(stdout, "{}", termion::cursor::Goto(textPos.x, textPos.y)).unwrap();
+            } else if b == 127 {
+                if textPos.x > 1 {
+                    textPos.x -= 1;
+                } else if textPos.y > 1 {
+                    textPos.y -= 1;
+                    // textPos.x
+                }
             } else if !command_mode {
                 write!(stdout, "{}", b as char).unwrap();
                 textPos.x += 1;
             };
-            let mut data_file = std::fs::OpenOptions::new()
-                .append(true)
-                .open("./temp/cursor.txt")
-                .expect("cannot open file");
-
-            let temp_std_out = stdout.borrow_mut();
-
-            let mut test = format!(
-                "Actual: {:?}\nExpected: {},{}\n\n",
-                temp_std_out.cursor_pos().unwrap_or_default(),
-                textPos.x,
-                textPos.y
-            );
-
-            let temp: &[u8] = unsafe { test.as_mut_vec() };
-            let _ = data_file.write(temp);
         }
 
         stdout.flush().unwrap();
